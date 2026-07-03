@@ -1,6 +1,5 @@
-// Multi-provider AI chat.
-// Gemini usa API oficial do Google Gemini (funciona em qualquer ambiente).
-// OpenAI e Anthropic usam a chave da propria empresa.
+// Multi-provider AI chat. Gemini default via Lovable Gateway (free for users).
+// OpenAI e Anthropic usam a chave da própria empresa.
 
 export interface ChatMsg {
   role: "system" | "user" | "assistant";
@@ -10,16 +9,15 @@ export interface ChatMsg {
 export interface AiProviderConfig {
   provider?: "gemini" | "openai" | "anthropic" | string;
   model?: string;
-  geminiKey?: string;
   openaiKey?: string;
   anthropicKey?: string;
 }
 
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 export async function lovableAiChat(
   messages: ChatMsg[],
-  modelOrConfig: string | AiProviderConfig = "gemini-2.5-flash",
+  modelOrConfig: string | AiProviderConfig = "google/gemini-2.5-flash",
 ): Promise<string> {
   const cfg: AiProviderConfig =
     typeof modelOrConfig === "string"
@@ -29,63 +27,33 @@ export async function lovableAiChat(
 
   if (provider === "openai") {
     const key = cfg.openaiKey?.trim();
-    if (!key) throw new Error("Chave OpenAI nao configurada na sua empresa.");
+    if (!key) throw new Error("Chave OpenAI não configurada na sua empresa.");
     const model = cfg.model || "gpt-4o-mini";
     return openAiChat(key, model, messages);
   }
   if (provider === "anthropic") {
     const key = cfg.anthropicKey?.trim();
-    if (!key) throw new Error("Chave Anthropic (Claude) nao configurada na sua empresa.");
+    if (!key) throw new Error("Chave Anthropic (Claude) não configurada na sua empresa.");
     const model = cfg.model || "claude-3-5-sonnet-latest";
     return anthropicChat(key, model, messages);
   }
-
-  // default: Gemini (API oficial do Google)
-  // Chave: primeiro a do config, depois a env var GOOGLE_API_KEY
-  const key = cfg.geminiKey?.trim() || process.env.GOOGLE_API_KEY;
-  if (!key) {
-    throw new Error("Chave Gemini nao configurada. Defina GOOGLE_API_KEY no servidor ou a chave da empresa no painel.");
-  }
-  const modelName = cfg.model || "gemini-2.5-flash";
-  // Converte "google/gemini-2.5-flash" para "gemini-2.5-flash" caso use formato antigo
-  const cleanModel = modelName.replace(/^google\//, "");
-  return geminiChat(key, cleanModel, messages);
-}
-
-async function geminiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
-  // Converte mensagens para formato Gemini (contents com parts)
-  // Gemini usa "user" e "model" (nao "assistant")
-  const contents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${key}`;
-  const res = await fetch(url, {
+  // default: Gemini via Lovable Gateway
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) throw new Error("LOVABLE_API_KEY ausente.");
+  const model = cfg.model || "google/gemini-2.5-flash";
+  const res = await fetch(GATEWAY, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 1024,
-      },
-    }),
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages }),
   });
-
   if (!res.ok) {
     const t = await res.text();
     if (res.status === 429) throw new Error("Limite de uso da IA atingido. Tente em alguns minutos.");
-    if (res.status === 403) throw new Error("Chave Gemini invalida ou sem permissao.");
-    throw new Error(`Gemini API: ${res.status} ${t.slice(0, 300)}`);
+    if (res.status === 402) throw new Error("Créditos de IA esgotados no workspace.");
+    throw new Error(`Lovable AI: ${res.status} ${t}`);
   }
-
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini retornou resposta vazia.");
-  return text.toString().trim();
+  return data?.choices?.[0]?.message?.content?.toString().trim() || "";
 }
 
 async function openAiChat(key: string, model: string, messages: ChatMsg[]): Promise<string> {
