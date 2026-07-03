@@ -112,12 +112,16 @@ echo -e "${GREEN}  ✓ Arquivos prontos${NC}"
 
 # ===== 5. Subir containers =====
 echo ""
-echo -e "${BLUE}[5/5] Iniciando ZAPIACRM (~3-5 min, nao feche esta janela)...${NC}"
-docker compose up -d
+echo -e "${BLUE}[5/5] Iniciando ZAPIACRM (~5-10 min, nao feche esta janela)...${NC}"
+echo "  - Postgres"
+echo "  - Evolution API (WhatsApp)"
+echo "  - ZAPIACRM (app principal)"
+echo ""
+docker compose up -d --build
 
 echo ""
-echo -e "${YELLOW}Aguardando sistema inicializar...${NC}"
-for i in {1..40}; do
+echo -e "${YELLOW}Aguardando sistema inicializar (~3 min para build)...${NC}"
+for i in {1..60}; do
   if curl -s http://localhost:4000 > /dev/null 2>&1; then
     break
   fi
@@ -135,14 +139,18 @@ echo -e "${YELLOW}>>> Acesse no navegador: <<<${NC}"
 echo ""
 echo -e "    ${CYAN}http://$DOMAIN:4000${NC}"
 echo ""
+echo -e "${BLUE}Outros servicos:${NC}"
+echo "  Evolution API (WhatsApp): ${CYAN}http://$DOMAIN:8080/manager${NC}"
+echo ""
 echo -e "${BLUE}Proximos passos:${NC}"
 echo "  1. Abra o link acima"
 echo "  2. Clique em 'Criar conta' (voce sera o admin)"
 echo "  3. Va em /master/painel"
-echo "  4. Clique em 'Conectar WhatsApp' e escaneie o QR Code"
+echo "  4. Em WhatsApp, escaneie o QR Code em http://$DOMAIN:8080/manager"
 echo ""
 echo -e "${BLUE}Comandos uteis:${NC}"
 echo "  ${YELLOW}cd /opt/zapiacrm && docker compose logs -f${NC}   # ver logs"
 echo "  ${YELLOW}cd /opt/zapiacrm && docker compose restart${NC}  # reiniciar"
+echo "  ${YELLOW}cd /opt/zapiacrm && docker compose ps${NC}       # ver status"
 echo ""
 echo -e "${GREEN}Sistema funcionando 24/7!${NC}"

@@ -1,7 +1,6 @@
 # =============================================================================
-# ZAPIACRM - Docker Compose (com suporte a build local)
-# Para desenvolvimento/teste, usa build local (sem precisar Docker Hub)
-# Para producao, use imagem do Docker Hub
+# ZAPIACRM - Docker Compose
+# Servicos: postgres + evolution (whatsapp) + zapiacrm (app)
 # =============================================================================
 
 services:
@@ -25,9 +24,32 @@ services:
     networks:
       - zapiacrm_net
 
+  # ===== EVOLUTION API (WhatsApp) =====
+  evolution:
+    image: atendai/evolution-api:latest
+    container_name: ${PROJECT_NAME:-zapiacrm}-evolution
+    restart: unless-stopped
+    environment:
+      SERVER_URL: http://localhost:${EVOLUTION_PORT:-8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-zapiacrm-evolution-2026}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_ENABLED: true
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapiacrm}
+      REDIS_ENABLED: false
+      STORE_MESSAGES: true
+      STORE_MESSAGE_UP: true
+    volumes:
+      - evolution_data:/evolution/instances
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zapiacrm_net
+
   # ===== APLICACAO ZAPIACRM =====
   zapiacrm:
-    # Build local (alternativa ao image:)
     build:
       context: .
       dockerfile: Dockerfile
@@ -37,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      evolution:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapiacrm}
       SUPABASE_URL: ${SUPABASE_URL:-http://localhost:4000}
@@ -53,9 +77,10 @@ services:
       VITE_GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      VITE_EVOLUTION_API_URL: ${EVOLUTION_API_URL}
+      # Evolution API local (mesma rede Docker)
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-zapiacrm-evolution-2026}
+      VITE_EVOLUTION_API_URL: http://evolution:8080
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 4000
@@ -67,6 +92,8 @@ services:
 volumes:
   postgres_data:
     name: ${PROJECT_NAME:-zapiacrm}_postgres_data
+  evolution_data:
+    name: ${PROJECT_NAME:-zapiacrm}_evolution_data
 
 networks:
   zapiacrm_net:
